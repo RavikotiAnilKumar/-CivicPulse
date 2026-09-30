@@ -1,0 +1,6 @@
+id,district,category,severity,population,requests
+001,Guntur,Roads,High,8420,342
+002,Krishna,Water,Critical,12600,287
+003,Vizag,Healthcare,High,9100,211
+004,Nellore,Education,Medium,5300,164
+005,Prakasam,Roads,High,7400,192
