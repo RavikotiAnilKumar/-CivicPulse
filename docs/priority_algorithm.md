@@ -28,8 +28,27 @@ correction is intentional; it follows the specified weights.
 | 85–100 | Critical |
 
 The API returns the five input values, weighted score, band, and a plain-language
-contribution explanation. The initial demo uses seeded values and transparent
-keyword rules; it does not call an LLM or infer an official budget decision.
+contribution explanation. The demo calculates each input from its joined sample
+datasets:
+
+- **Citizen demand:** requests for this country/category/region relative to the
+  largest seeded request count for that category in the selected country;
+  saved submissions add to the region's count.
+- **Infrastructure gap:** `100 - index` for the matching service, using the
+  region's index (for example, road index for Roads).
+- **Population impact:** estimated affected population relative to a regional
+  demographic threshold of the smaller of 10% of the vulnerable population or
+  3% of total population; capped at 100.
+- **Urgency:** Low 25, Medium 50, High 75, Critical 100, derived from the
+  severity label.
+- **Investment gap:** uncommitted share of the matching illustrative
+  investment-plan amount (`(planned - committed) / planned × 100`); 50 when no
+  category-matched plan exists.
+
+The datasets are synthetic and the language/category rules are deterministic;
+the prototype does not call an LLM, connect to official budget records, or infer
+an official budget decision. See the project README for additional production
+gaps.
 
 Before real use, define and validate normalization against representative,
 consented local data; assess language and demographic bias; document provenance

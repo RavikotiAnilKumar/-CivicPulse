@@ -1,6 +1,21 @@
-id,district,category,severity,population,requests
-001,Guntur,Roads,High,8420,342
-002,Krishna,Water,Critical,12600,287
-003,Vizag,Healthcare,High,9100,211
-004,Nellore,Education,Medium,5300,164
-005,Prakasam,Roads,High,7400,192
+country,country_code,region,category,severity,population_affected,requests
+India,IN,Guntur,Roads,High,8420,342
+India,IN,Guntur,Water,Critical,12600,287
+India,IN,Krishna,Water,Critical,12600,287
+India,IN,Krishna,Healthcare,High,9100,211
+Brazil,BR,Bahia,Water,Critical,18400,326
+Brazil,BR,Bahia,Roads,High,11200,244
+Brazil,BR,Sao Paulo,Healthcare,High,22100,391
+Brazil,BR,Sao Paulo,Public Transit,Medium,15400,278
+Russia,RU,Tatarstan,Roads,High,7300,188
+Russia,RU,Tatarstan,Heating,High,5600,174
+Russia,RU,Moscow,Public Transit,Medium,19200,305
+Russia,RU,Moscow,Healthcare,Medium,14800,226
+China,CN,Guangdong,Water,High,26500,418
+China,CN,Guangdong,Public Transit,Medium,31200,386
+China,CN,Sichuan,Roads,Critical,17400,294
+China,CN,Sichuan,Healthcare,High,18900,273
+South Africa,ZA,Gauteng,Water,Critical,24600,367
+South Africa,ZA,Gauteng,Electricity,High,22800,344
+South Africa,ZA,Western Cape,Public Transit,High,13800,246
+South Africa,ZA,Western Cape,Healthcare,Medium,12400,219

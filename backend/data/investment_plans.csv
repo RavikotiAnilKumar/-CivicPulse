@@ -1,0 +1,11 @@
+country,country_code,region,category,project_name,planned_amount_millions,committed_amount_millions,currency,fiscal_year,source_label
+India,IN,Guntur,Roads,Rural road rehabilitation plan,24,6,INR,2026-27,Illustrative public investment plan
+India,IN,Krishna,Water,Regional drinking water access,38,9,INR,2026-27,Illustrative public investment plan
+Brazil,BR,Bahia,Water,Community water resilience program,52,14,BRL,2026,Illustrative public investment plan
+Brazil,BR,Sao Paulo,Healthcare,Primary care access improvement,140,96,BRL,2026,Illustrative public investment plan
+Russia,RU,Tatarstan,Roads,Regional road renewal program,860,420,RUB,2026,Illustrative public investment plan
+Russia,RU,Moscow,Public Transit,Urban mobility modernization,2400,1900,RUB,2026,Illustrative public investment plan
+China,CN,Guangdong,Water,Urban water resilience upgrade,620,410,CNY,2026,Illustrative public investment plan
+China,CN,Sichuan,Roads,Rural transport connectivity plan,480,125,CNY,2026,Illustrative public investment plan
+South Africa,ZA,Gauteng,Water,Water network reliability program,1900,520,ZAR,2026-27,Illustrative public investment plan
+South Africa,ZA,Western Cape,Public Transit,Regional public transport access,980,610,ZAR,2026-27,Illustrative public investment plan

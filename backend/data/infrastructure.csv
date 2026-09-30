@@ -1,6 +1,11 @@
-district,road_index,water_index,health_index,education_index
-Guntur,31,61,48,72
-Krishna,42,28,65,54
-Vizag,67,73,41,81
-Nellore,39,58,62,69
-Prakasam,35,44,51,63
+country,country_code,region,road_index,water_index,health_index,education_index,transit_index,energy_index,latitude,longitude
+India,IN,Guntur,31,61,48,72,46,57,16.30,80.44
+India,IN,Krishna,42,28,65,54,52,61,16.61,80.72
+Brazil,BR,Bahia,39,44,56,62,48,66,-12.97,-38.50
+Brazil,BR,Sao Paulo,71,76,74,82,69,81,-23.55,-46.63
+Russia,RU,Tatarstan,68,72,76,78,71,84,55.79,49.12
+Russia,RU,Moscow,82,86,88,91,90,89,55.76,37.62
+China,CN,Guangdong,75,67,82,86,88,91,23.13,113.26
+China,CN,Sichuan,48,53,62,71,51,73,30.57,104.07
+South Africa,ZA,Gauteng,57,46,69,73,62,48,-26.20,28.04
+South Africa,ZA,Western Cape,72,68,76,81,70,74,-33.92,18.42

@@ -1,31 +1,45 @@
 # CivicPulse AI
 
-CivicPulse is a hackathon prototype for turning multilingual community reports
-into structured issues and explainable infrastructure priorities. It includes
-a Flutter citizen-report UI, a government dashboard, a FastAPI backend, and
-illustrative CSV datasets.
+CivicPulse is a hackathon prototype for turning community reports into
+structured issues and explainable infrastructure priorities across BRICS
+countries. It includes a Flutter citizen-report UI, a country-filterable
+government dashboard, a FastAPI backend, and joined illustrative CSV datasets.
+
+## BRICS theme: Innovation
+
+CivicPulse presents **citizen voice as public-sector innovation**: it combines
+multilingual reporting, explainable prioritization, regional data fusion, and
+cross-country learning in one civic-tech demonstration. Its innovation claim
+is the prototype workflow and transparent decision support—not autonomous AI
+or verified impact. The regional examples are synthetic, and project priorities
+are suggestions for human review rather than government decisions.
 
 ## Prototype scope
 
-- Submit a citizen report as text or speech and receive structured analysis
-  from the API.
-- Demonstrate Telugu language detection and one sample translation without an
-  external AI key.
+- Submit a citizen report as text or speech, choosing a BRICS country and a
+  configured region.
+- Demonstrate script/keyword-based language detection and classification for
+  selected local languages. One exact Telugu sample has a demo translation;
+  general-purpose translation is not implemented.
 - View priority score inputs, their weights, and a plain-language explanation.
 - Voice input uses the device/browser speech recognition service and requests
   microphone permission.
 - Reports are stored in a local SQLite database. A WebSocket pushes report
   submissions to the dashboard, which reloads its aggregates and recent-report
   feed immediately.
-- Explore seeded dashboard totals, hotspot markers, priority areas, and project
-  recommendations; submitted reports are incorporated into those views.
+- Filter the live dashboard by country or across all five BRICS countries.
+- Explore regional hotspots and recommendations joined from citizen request,
+  demographic, infrastructure-index, and illustrative investment-plan data.
+  Newly submitted reports are persisted and incorporated into the dashboard
+  over WebSockets.
 - Live WhatsApp/messaging integrations, user accounts, and a production
   database/service are not included.
 
-All sample metrics, affected-population estimates, and costs are illustrative.
-The prototype score is not an official government allocation formula.
-The dashboard combines these seeded starting metrics with saved submissions;
-the dashboard WebSocket sends new report events immediately.
+**All regional, demographic, infrastructure, request-volume, and investment
+plan values are synthetic demonstration data.** They are not verified national
+statistics, public budget records, or government recommendations. The prototype
+score is not an official allocation formula. Language processing is a
+deterministic demonstration, not an LLM or production translation service.
 
 ## Structure
 
@@ -42,7 +56,8 @@ CivicPulse_AI/
 │   └── data/
 │       ├── citizen_requests.csv
 │       ├── infrastructure.csv
-│       └── demographics.csv
+│       ├── demographics.csv
+│       └── investment_plans.csv
 ├── docs/
 │   ├── priority_algorithm.md
 │   └── demo_script.md
@@ -62,8 +77,9 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 Open the interactive API docs at <http://127.0.0.1:8000/docs>. Check
-`GET /api/health`, submit reports to `POST /api/report`, and load the dashboard
-with `GET /api/dashboard`.
+`GET /api/health`, retrieve report country/region options from
+`GET /api/countries`, submit reports to `POST /api/report`, and load all-country
+or country-filtered analytics with `GET /api/dashboard?country=India`.
 
 Run backend tests from the `backend` directory:
 
@@ -119,6 +135,17 @@ The backend applies the documented weights:
 ```
 
 See [docs/priority_algorithm.md](docs/priority_algorithm.md) for bands,
-limitations, and safeguards. The initial rules are deterministic demo
+normalization, limitations, and safeguards. The rules are deterministic demo
 heuristics—not an LLM—and should be replaced only after selecting and validating
 appropriate models and data governance.
+
+## Challenge scope and production gaps
+
+This implementation provides a cross-country **demo slice**, not a production
+Digital Public Good platform. It has selectable demo regions in Brazil, China,
+India, Russia, and South Africa. It does not connect to authoritative BRICS
+demographic or investment datasets, messaging providers, or external translation
+and AI services. Production work must add licensed/official data connectors,
+country-specific administrative boundaries, consent and retention controls,
+secure identity/access, human review, accessibility/localization, and
+independently validated language models and scoring.

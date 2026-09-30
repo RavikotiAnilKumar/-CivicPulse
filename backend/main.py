@@ -38,6 +38,7 @@ app.add_middleware(
 
 class ReportInput(BaseModel):
     text: str = Field(min_length=4, max_length=2000)
+    country: str = Field(default="India", min_length=2, max_length=80)
     location: str = Field(default="Guntur", min_length=2, max_length=100)
     language: str = Field(default="Auto-detect", max_length=40)
 
@@ -53,11 +54,14 @@ class ScoreBreakdown(BaseModel):
 class AnalysisResult(BaseModel):
     report_id: int | None = None
     submitted_at: str | None = None
+    country: str = "India"
+    country_code: str = "IN"
     language: str
     translation: str
     category: str
     issue: str
     location: str
+    infrastructure_index: int = 0
     severity: Literal["Low", "Medium", "High", "Critical"]
     people_affected: int
     summary: str
@@ -66,6 +70,16 @@ class AnalysisResult(BaseModel):
     score_breakdown: ScoreBreakdown
     score_explanation: str
     recommendation: str
+    investment_plan: str = "No matching sample plan"
+    latitude: float = 0
+    longitude: float = 0
+
+
+class CountryOption(BaseModel):
+    name: str
+    code: str
+    languages: list[str]
+    regions: list[str]
 
 
 class PriorityArea(BaseModel):
@@ -77,15 +91,21 @@ class PriorityArea(BaseModel):
 class Recommendation(BaseModel):
     project: str
     location: str
+    country: str = "India"
+    category: str = "Infrastructure"
     population: int
     requests: int
     infrastructure_index: int
     estimate: str
     priority: Literal["Low", "Medium", "High", "Critical"]
     priority_score: float
+    score_breakdown: ScoreBreakdown
+    explanation: str
 
 
 class DashboardResponse(BaseModel):
+    selected_country: str
+    countries: list[CountryOption]
     metrics: dict[str, int]
     priority_areas: list[PriorityArea]
     recommendations: list[Recommendation]
@@ -130,31 +150,16 @@ WEIGHTS = {
     "investment_gap": 0.10,
 }
 
-LANGUAGE_NAMES = {
-    "Telugu": "Telugu",
-    "Hindi": "Hindi",
-    "Tamil": "Tamil",
-    "Kannada": "Kannada",
-    "Bengali": "Bengali",
-    "English": "English",
-}
-
 TELUGU_WATER = "మా గ్రామంలో తాగునీటి సమస్య ఉంది."
 TELUGU_ROAD = "మా గ్రామంలో రోడ్డు చాలా పాడైపోయింది."
 dashboard_connections = DashboardConnections()
-SAMPLE_METRICS = {
-    "citizen_requests": 12486,
-    "critical_issues": 1248,
-    "infrastructure_gaps": 386,
-    "districts_covered": 28,
+COUNTRY_LANGUAGES = {
+    "Brazil": ["Portuguese", "English"],
+    "China": ["Chinese (Mandarin)", "English"],
+    "India": ["English", "Hindi", "Telugu", "Tamil", "Kannada", "Bengali"],
+    "Russia": ["Russian", "English"],
+    "South Africa": ["English", "isiZulu", "isiXhosa", "Afrikaans"],
 }
-SAMPLE_AREAS = [
-    PriorityArea(category="Roads", requests=342, priority="High"),
-    PriorityArea(category="Water", requests=287, priority="Critical"),
-    PriorityArea(category="Healthcare", requests=211, priority="High"),
-    PriorityArea(category="Education", requests=164, priority="Medium"),
-    PriorityArea(category="Street Lighting", requests=109, priority="Medium"),
-]
 
 
 def _database_path() -> Path:
@@ -205,6 +210,42 @@ def _read_csv(filename: str) -> list[dict[str, str]]:
         ) from exc
 
 
+def _country_options() -> list[CountryOption]:
+    demographics = _read_csv("demographics.csv")
+    codes = {
+        row["country"]: row["country_code"]
+        for row in _read_csv("infrastructure.csv")
+    }
+    regions_by_country: dict[str, list[str]] = {}
+    for row in demographics:
+        regions_by_country.setdefault(row["country"], []).append(row["region"])
+    return [
+        CountryOption(
+            name=country,
+            code=codes[country],
+            languages=languages,
+            regions=regions_by_country[country],
+        )
+        for country, languages in COUNTRY_LANGUAGES.items()
+        if country in regions_by_country
+    ]
+
+
+def _matching_row(
+    filename: str, country: str, region: str, category: str | None = None
+) -> dict[str, str] | None:
+    return next(
+        (
+            row
+            for row in _read_csv(filename)
+            if row["country"].casefold() == country.casefold()
+            and row["region"].casefold() == region.casefold()
+            and (category is None or row.get("category", "").casefold() == category.casefold())
+        ),
+        None,
+    )
+
+
 def detect_language(text: str) -> str:
     for name, pattern in (
         ("Telugu", r"[\u0C00-\u0C7F]"),
@@ -212,24 +253,43 @@ def detect_language(text: str) -> str:
         ("Tamil", r"[\u0B80-\u0BFF]"),
         ("Kannada", r"[\u0C80-\u0CFF]"),
         ("Bengali", r"[\u0980-\u09FF]"),
+        ("Russian", r"[\u0400-\u04FF]"),
+        ("Chinese (Mandarin)", r"[\u4E00-\u9FFF]"),
     ):
         if re.search(pattern, text):
             return name
+    if re.search(r"\b(água|bairro|estrada|saúde|iluminação)\b", text, re.I):
+        return "Portuguese"
     return "English"
 
 
 def _classify(text: str) -> tuple[str, str]:
     normalized = text.lower()
-    if re.search(r"water|தண்ணீர்|ನೀರು|నీరు|నీటి|తాగునీటి|पानी|जल", normalized):
+    if re.search(
+        r"water|água|вод|水|தண்ணீர்|ನೀರು|నీరు|నీటి|తాగునీటి|पानी|जल",
+        normalized,
+    ):
         return "Water", "Water access"
-    if re.search(r"road|రోడ్డు|రహదారి|सड़क|சாலை|ರಸ್ತೆ", normalized):
+    if re.search(r"road|estrada|дорог|道路|రోడ్డు|రహదారి|सड़क|சாலை|ರಸ್ತೆ", normalized):
         return "Roads", "Damaged road"
-    if re.search(r"light|lighting|వెలుగు|లైటు|रोशनी|விளக்கு", normalized):
+    if re.search(
+        r"light|lighting|iluminação|свет|照明|వెలుగు|లైటు|रोशनी|விளக்கு",
+        normalized,
+    ):
         return "Street Lighting", "Missing street lights"
-    if re.search(r"health|hospital|ఆరోగ్|स्वास्थ्य|மருத்துவ", normalized):
+    if re.search(
+        r"health|hospital|saúde|больниц|医院|ఆరోగ్|स्वास्थ्य|மருத்துவ",
+        normalized,
+    ):
         return "Healthcare", "Healthcare access"
-    if re.search(r"school|education|విద్య|शिक्षा|கல்வி", normalized):
+    if re.search(r"school|education|школ|学校|విద్య|शिक्षा|கல்வி", normalized):
         return "Education", "Education access"
+    if re.search(r"transit|bus|transport|транспорт|公共交通", normalized):
+        return "Public Transit", "Public transit access"
+    if re.search(r"electricity|power|энерг|电力", normalized):
+        return "Electricity", "Electricity access"
+    if re.search(r"heating|тепл|供暖", normalized):
+        return "Heating", "Heating access"
     return "Infrastructure", "Community infrastructure issue"
 
 
@@ -268,93 +328,211 @@ def calculate_priority(scores: ScoreBreakdown) -> tuple[float, str]:
     return score, priority
 
 
-def analyze_report(report: ReportInput) -> AnalysisResult:
-    language = (
-        detect_language(report.text)
-        if report.language == "Auto-detect"
-        else report.language
-    )
-    category, issue = _classify(report.text)
-    infrastructure = next(
-        (
-            row
-            for row in _read_csv("infrastructure.csv")
-            if row["district"].casefold() == report.location.casefold()
-        ),
-        None,
-    )
-    if infrastructure is None:
-        infrastructure = _read_csv("infrastructure.csv")[0]
-
+def _category_index(row: dict[str, str], category: str) -> int:
     index_key = {
         "Roads": "road_index",
         "Water": "water_index",
         "Street Lighting": "road_index",
         "Healthcare": "health_index",
         "Education": "education_index",
+        "Public Transit": "transit_index",
+        "Electricity": "energy_index",
+        "Heating": "energy_index",
         "Infrastructure": "road_index",
-    }[category]
-    infrastructure_index = int(infrastructure[index_key])
-    infrastructure_gap = 100 - infrastructure_index
+    }.get(category, "road_index")
+    return int(row[index_key])
 
-    is_urgent = bool(
-        re.search(
-            r"urgent|danger|unsafe|critical|no water|no light|damaged|damage|పాడై|సమస్య",
-            report.text,
-            re.I,
-        )
-    )
-    severity = "High" if is_urgent else "Medium"
-    if infrastructure_gap >= 75 and is_urgent:
-        severity = "Critical"
 
-    people_affected = 12600 if category == "Water" else 850
-    scores = ScoreBreakdown(
-        citizen_demand=82,
-        infrastructure_gap=float(infrastructure_gap),
-        population_impact=min(100.0, round(people_affected / 150, 1)),
-        urgency=90.0 if is_urgent else 58.0,
-        investment_gap=81.0,
-    )
-    priority_score, priority = calculate_priority(scores)
-    recommendation = (
-        "Prioritize drinking-water infrastructure improvements."
-        if category == "Water"
-        else "Assess and rehabilitate the affected community infrastructure."
-        if category != "Roads"
-        else "Prioritize road rehabilitation and a safety review near the school zone."
-    )
-    summary = (
-        f"{issue} reported in {report.location}. The request is marked {severity.lower()} "
-        f"priority and an estimated {people_affected:,} people may be affected."
-    )
-    explanation = (
+def _severity_score(severity: str) -> float:
+    return {"Low": 25.0, "Medium": 50.0, "High": 75.0, "Critical": 100.0}[
+        severity
+    ]
+
+
+def _score_explanation(scores: ScoreBreakdown) -> str:
+    return (
         f"Demand contributes {scores.citizen_demand * WEIGHTS['citizen_demand']:.1f} points, "
         f"infrastructure gap {scores.infrastructure_gap * WEIGHTS['infrastructure_gap']:.1f}, "
         f"population impact {scores.population_impact * WEIGHTS['population_impact']:.1f}, "
         f"urgency {scores.urgency * WEIGHTS['urgency']:.1f}, and investment gap "
         f"{scores.investment_gap * WEIGHTS['investment_gap']:.1f}."
     )
+
+
+def _investment_label(plan: dict[str, str] | None) -> str:
+    if plan is None:
+        return "No matching sample plan"
+    amount = float(plan["planned_amount_millions"])
+    committed_amount = float(plan["committed_amount_millions"])
+    currency = plan["currency"]
+    if currency == "INR":
+        value = f"₹{amount / 10:.1f} crore"
+        committed_value = f"₹{committed_amount / 10:.1f} crore"
+    else:
+        value = f"{currency} {amount:g} million"
+        committed_value = f"{currency} {committed_amount:g} million"
+    return (
+        f"{plan['project_name']}: {value} planned, "
+        f"{committed_value} committed "
+        f"({plan['fiscal_year']}; illustrative)"
+    )
+
+
+def _score_inputs(
+    country: str,
+    region: str,
+    category: str,
+    requests: int,
+    population_affected: int,
+    severity: str,
+) -> tuple[ScoreBreakdown, int, dict[str, str] | None]:
+    infrastructure = _matching_row("infrastructure.csv", country, region)
+    demographics = _matching_row("demographics.csv", country, region)
+    if infrastructure is None or demographics is None:
+        raise HTTPException(status_code=422, detail="Unknown country or region.")
+    plan = _matching_row("investment_plans.csv", country, region, category)
+    category_rows = [
+        row
+        for row in _read_csv("citizen_requests.csv")
+        if row["country"].casefold() == country.casefold()
+        and row["category"].casefold() == category.casefold()
+    ]
+    demand_max = max((int(row["requests"]) for row in category_rows), default=1)
+    planned = float(plan["planned_amount_millions"]) if plan else 0
+    committed = float(plan["committed_amount_millions"]) if plan else 0
+    population = int(demographics["population"])
+    vulnerable_population = int(demographics["vulnerable_population"])
+    population_impact_threshold = max(
+        1, min(int(vulnerable_population * 0.10), int(population * 0.03))
+    )
+    scores = ScoreBreakdown(
+        citizen_demand=min(100.0, round(100 * requests / max(demand_max, 1), 1)),
+        infrastructure_gap=float(100 - _category_index(infrastructure, category)),
+        population_impact=min(
+            100.0,
+            round(100 * population_affected / population_impact_threshold, 1),
+        ),
+        urgency=_severity_score(severity),
+        investment_gap=(
+            round(100 * max(0, planned - committed) / planned, 1)
+            if planned
+            else 50.0
+        ),
+    )
+    return scores, _category_index(infrastructure, category), plan
+
+
+def analyze_report(report: ReportInput) -> AnalysisResult:
+    language = (
+        detect_language(report.text)
+        if report.language == "Auto-detect"
+        else report.language
+    )
+    options = {option.name.casefold(): option for option in _country_options()}
+    country_option = options.get(report.country.casefold())
+    if country_option is None:
+        raise HTTPException(status_code=422, detail="Select a supported BRICS country.")
+    if (
+        report.language != "Auto-detect"
+        and report.language not in country_option.languages
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail=f"{report.language} is not configured for {country_option.name}.",
+        )
+    if not any(
+        region.casefold() == report.location.casefold()
+        for region in country_option.regions
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail=f"{report.location} is not a configured region in {country_option.name}.",
+        )
+    regional_data = _matching_row(
+        "infrastructure.csv", country_option.name, report.location
+    )
+    demographics = _matching_row(
+        "demographics.csv", country_option.name, report.location
+    )
+    if regional_data is None or demographics is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Regional infrastructure or demographic data is unavailable.",
+        )
+    category, issue = _classify(report.text)
+    baseline = _matching_row(
+        "citizen_requests.csv", country_option.name, report.location, category
+    )
+    saved = [
+        item
+        for item in _saved_reports()
+        if item.country.casefold() == country_option.name.casefold()
+        and item.location.casefold() == report.location.casefold()
+        and item.category.casefold() == category.casefold()
+    ]
+    severity = "High" if re.search(
+        r"urgent|danger|unsafe|critical|no water|no light|damaged|damage|பாடை|సమస్య",
+        report.text,
+        re.I,
+    ) else "Medium"
+    if baseline and baseline["severity"] == "Critical" and severity == "High":
+        severity = "Critical"
+    people_affected = int(baseline["population_affected"]) if baseline else max(
+        1, int(int(demographics["vulnerable_population"]) * 0.01)
+    )
+    requests = (int(baseline["requests"]) if baseline else 0) + len(saved) + 1
+    scores, infrastructure_index, plan = _score_inputs(
+        country_option.name,
+        report.location,
+        category,
+        requests,
+        people_affected,
+        severity,
+    )
+    priority_score, priority = calculate_priority(scores)
+    recommendation = (
+        f"Prioritize {category.lower()} investment in {report.location}, "
+        f"{country_option.name}; review the local plan and validate the unmet need."
+        if category == "Water"
+        else f"Assess and address the {issue.lower()} in {report.location}, "
+        f"{country_option.name}; confirm scope with local authorities."
+    )
+    summary = (
+        f"{issue} reported in {report.location}, {country_option.name}. "
+        f"The request is marked {severity.lower()} "
+        f"priority and an estimated {people_affected:,} people may be affected."
+    )
     return AnalysisResult(
         language=language,
         translation=_translation(report.text, language, category),
+        country=country_option.name,
+        country_code=country_option.code,
         category=category,
         issue=issue,
         location=report.location,
+        infrastructure_index=infrastructure_index,
         severity=severity,
         people_affected=people_affected,
         summary=summary,
         priority_score=priority_score,
         priority=priority,
         score_breakdown=scores,
-        score_explanation=explanation,
+        score_explanation=_score_explanation(scores),
         recommendation=recommendation,
+        investment_plan=_investment_label(plan),
+        latitude=float(regional_data["latitude"]),
+        longitude=float(regional_data["longitude"]),
     )
 
 
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "mode": "prototype"}
+
+
+@app.get("/api/countries", response_model=list[CountryOption])
+def countries() -> list[CountryOption]:
+    return _country_options()
 
 
 @app.post("/api/report", response_model=AnalysisResult)
@@ -381,129 +559,164 @@ async def submit_report(report: ReportInput) -> AnalysisResult:
 
 
 @app.get("/api/dashboard", response_model=DashboardResponse)
-def dashboard() -> DashboardResponse:
-    reports = _saved_reports()
-    category_counts: dict[str, int] = {}
-    category_priorities: dict[str, list[str]] = {}
-    for report in reports:
-        category_counts[report.category] = category_counts.get(report.category, 0) + 1
-        category_priorities.setdefault(report.category, []).append(report.priority)
-
-    areas = [
-        PriorityArea(
-            category=area.category,
-            requests=area.requests + category_counts.pop(area.category, 0),
-            priority=max(
-                [area.priority, *category_priorities.get(area.category, [])],
-                key=lambda value: {
-                    "Low": 0,
-                    "Medium": 1,
-                    "High": 2,
-                    "Critical": 3,
-                }[value],
-            ),
-        )
-        for area in SAMPLE_AREAS
-    ]
-    areas.extend(
-        PriorityArea(
-            category=category,
-            requests=count,
-            priority=max(
-                (report.priority for report in reports if report.category == category),
-                key=lambda value: {
-                    "Low": 0,
-                    "Medium": 1,
-                    "High": 2,
-                    "Critical": 3,
-                }[value],
-            ),
-        )
-        for category, count in category_counts.items()
+def dashboard(country: str = "All BRICS") -> DashboardResponse:
+    country_options = _country_options()
+    country_by_name = {option.name.casefold(): option.name for option in country_options}
+    selected_country = (
+        "All BRICS"
+        if country.casefold() == "all brics"
+        else country_by_name.get(country.casefold())
     )
+    if selected_country is None:
+        raise HTTPException(status_code=422, detail="Select a supported BRICS country.")
 
-    dynamic_recommendations = [
-        Recommendation(
-            project=f"{report.category} improvement: {report.issue}",
-            location=f"{report.location} District",
-            population=report.people_affected,
-            requests=sum(
-                saved.category == report.category for saved in reports
-            ),
-            infrastructure_index=max(
-                0, 100 - int(report.score_breakdown.infrastructure_gap)
-            ),
-            estimate="Needs assessment",
-            priority=report.priority,
-            priority_score=report.priority_score,
-        )
-        for report in reports[:5]
+    baseline_rows = _read_csv("citizen_requests.csv")
+    regions = _read_csv("infrastructure.csv")
+    if selected_country != "All BRICS":
+        baseline_rows = [
+            row for row in baseline_rows if row["country"] == selected_country
+        ]
+        regions = [row for row in regions if row["country"] == selected_country]
+    saved_reports = [
+        report
+        for report in _saved_reports()
+        if selected_country == "All BRICS"
+        or report.country.casefold() == selected_country.casefold()
     ]
-    dynamic_hotspots = [
-        {
-            "district": report.location,
-            "latitude": 16.3067,
-            "longitude": 80.4365,
-            "priority": report.priority,
+
+    grouped: dict[tuple[str, str, str], dict[str, object]] = {}
+    for row in baseline_rows:
+        key = (row["country"], row["region"], row["category"])
+        grouped[key] = {
+            "requests": int(row["requests"]),
+            "population": int(row["population_affected"]),
+            "severity": row["severity"],
+            "project": None,
         }
-        for report in reports[:10]
-    ]
+    for report in saved_reports:
+        key = (report.country, report.location, report.category)
+        values = grouped.setdefault(
+            key,
+            {
+                "requests": 0,
+                "population": report.people_affected,
+                "severity": report.severity,
+                "project": None,
+            },
+        )
+        values["requests"] = int(values["requests"]) + 1
+        values["population"] = max(int(values["population"]), report.people_affected)
+        if _severity_score(report.severity) > _severity_score(str(values["severity"])):
+            values["severity"] = report.severity
+
+    candidate_rows: list[Recommendation] = []
+    priority_areas: dict[str, dict[str, object]] = {}
+    for (region_country, region, category), values in grouped.items():
+        scores, index, plan = _score_inputs(
+            region_country,
+            region,
+            category,
+            int(values["requests"]),
+            int(values["population"]),
+            str(values["severity"]),
+        )
+        score, priority = calculate_priority(scores)
+        area = priority_areas.setdefault(
+            category, {"requests": 0, "priority": "Low"}
+        )
+        area["requests"] = int(area["requests"]) + int(values["requests"])
+        if _severity_score(priority) > _severity_score(str(area["priority"])):
+            area["priority"] = priority
+        candidate_rows.append(
+            Recommendation(
+                project=plan["project_name"] if plan else f"{category} improvement",
+                location=f"{region}, {region_country}",
+                country=region_country,
+                category=category,
+                population=int(values["population"]),
+                requests=int(values["requests"]),
+                infrastructure_index=index,
+                estimate=_investment_label(plan),
+                priority=priority,
+                priority_score=score,
+                score_breakdown=scores,
+                explanation=_score_explanation(scores),
+            )
+        )
+
+    hotspots: list[dict[str, str | float]] = []
+    for region_row in regions:
+        related = [
+            item
+            for item in candidate_rows
+            if item.country == region_row["country"]
+            and item.location.startswith(f"{region_row['region']},")
+        ]
+        worst = max(
+            related,
+            key=lambda item: _severity_score(item.priority),
+            default=None,
+        )
+        hotspots.append(
+            {
+                "district": region_row["region"],
+                "country": region_row["country"],
+                "latitude": float(region_row["latitude"]),
+                "longitude": float(region_row["longitude"]),
+                "priority": worst.priority if worst else "Low",
+            }
+        )
+
+    gap_dimensions = (
+        "road_index",
+        "water_index",
+        "health_index",
+        "education_index",
+        "transit_index",
+        "energy_index",
+    )
+    infrastructure_gaps = sum(
+        int(region[index]) < 50 for region in regions for index in gap_dimensions
+    )
+    baseline_total = sum(int(row["requests"]) for row in baseline_rows)
+    critical_total = sum(
+        int(row["requests"])
+        for row in baseline_rows
+        if row["severity"] == "Critical"
+    ) + sum(report.priority == "Critical" for report in saved_reports)
     return DashboardResponse(
+        selected_country=selected_country,
+        countries=country_options,
         metrics={
-            "citizen_requests": SAMPLE_METRICS["citizen_requests"] + len(reports),
-            "critical_issues": SAMPLE_METRICS["critical_issues"]
-            + sum(report.priority == "Critical" for report in reports),
-            "infrastructure_gaps": SAMPLE_METRICS["infrastructure_gaps"]
-            + sum(report.severity in ("High", "Critical") for report in reports),
-            "districts_covered": SAMPLE_METRICS["districts_covered"]
-            + len(
-                {
-                    report.location.casefold()
-                    for report in reports
-                    if report.location.casefold()
-                    not in {
-                        row["district"].casefold()
-                        for row in _read_csv("citizen_requests.csv")
-                    }
-                }
-            ),
+            "citizen_requests": baseline_total + len(saved_reports),
+            "critical_issues": critical_total,
+            "infrastructure_gaps": infrastructure_gaps,
+            "districts_covered": len(regions),
         },
-        priority_areas=areas,
-        recommendations=dynamic_recommendations
-        + [
-            Recommendation(
-                project="Road rehabilitation near School Zone",
-                location="Guntur District",
-                population=850,
-                requests=147,
-                infrastructure_index=32,
-                estimate="₹18 lakh",
-                priority="High",
-                priority_score=87.0,
-            ),
-            Recommendation(
-                project="Rural drinking-water access upgrade",
-                location="Krishna District",
-                population=12600,
-                requests=287,
-                infrastructure_index=28,
-                estimate="₹2.4 crore",
-                priority="Critical",
-                priority_score=89.0,
-            ),
+        priority_areas=[
+            PriorityArea(
+                category=category,
+                requests=int(values["requests"]),
+                priority=str(values["priority"]),
+            )
+            for category, values in sorted(
+                priority_areas.items(),
+                key=lambda item: int(item[1]["requests"]),
+                reverse=True,
+            )
         ],
-        hotspots=dynamic_hotspots
-        + [
-            {"district": "Guntur", "latitude": 16.3067, "longitude": 80.4365, "priority": "High"},
-            {"district": "Krishna", "latitude": 16.6100, "longitude": 80.7214, "priority": "Critical"},
-            {"district": "Vizag", "latitude": 17.6868, "longitude": 83.2185, "priority": "Medium"},
-            {"district": "Nellore", "latitude": 14.4426, "longitude": 79.9865, "priority": "Low"},
-        ],
+        recommendations=sorted(
+            candidate_rows,
+            key=lambda item: item.priority_score,
+            reverse=True,
+        )[:5],
+        hotspots=hotspots,
         prototype_notice=(
-            "All dashboard totals and project estimates are illustrative sample data. "
-            "Priority scores are a prototype model, not an official government allocation formula."
+            "BRICS country and regional records are synthetic demonstration data, "
+            "not verified national statistics or adopted public budgets. "
+            "Scores are an explainable prototype signal, not an official allocation formula."
         ),
-        recent_reports=reports[:20],
+        recent_reports=saved_reports[:20],
     )
 
 

@@ -118,11 +118,69 @@ class _CitizenReportPageState extends State<CitizenReportPage> {
   final controller = TextEditingController();
   final speech = SpeechToText();
   String selectedLanguage = 'Auto-detect';
+  String selectedCountry = 'India';
+  String selectedLocation = 'Guntur';
+  List<Map<String, dynamic>> countryOptions = [];
   bool submitting = false;
   bool listening = false;
   String? error;
   Map<String, dynamic>? result;
   String voicePrefix = '';
+
+  @override
+  void initState() {
+    super.initState();
+    loadCountryOptions();
+  }
+
+  Future<void> loadCountryOptions() async {
+    try {
+      final response = await http
+          .get(Uri.parse('$apiBaseUrl/api/countries'))
+          .timeout(const Duration(seconds: 12));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception('Countries API returned ${response.statusCode}.');
+      }
+      final decoded = jsonDecode(response.body);
+      if (decoded is! List<dynamic>) {
+        throw const FormatException('Unexpected countries response.');
+      }
+      if (!mounted) return;
+      setState(() {
+        countryOptions = decoded.cast<Map<String, dynamic>>();
+        final current = countryOptions.where(
+          (option) => option['name'] == selectedCountry,
+        );
+        if (current.isEmpty && countryOptions.isNotEmpty) {
+          selectedCountry = countryOptions.first['name'].toString();
+          selectedLocation = (countryOptions.first['regions'] as List<dynamic>)
+              .first
+              .toString();
+        }
+      });
+    } catch (exception) {
+      if (mounted) {
+        setState(() {
+          error = 'Could not load country and region options. $exception';
+        });
+      }
+    }
+  }
+
+  Map<String, dynamic>? get selectedCountryOption {
+    for (final option in countryOptions) {
+      if (option['name'] == selectedCountry) return option;
+    }
+    return null;
+  }
+
+  List<String> get selectedLanguages =>
+      (selectedCountryOption?['languages'] as List<dynamic>?)?.cast<String>() ??
+      const ['English', 'Hindi', 'Telugu', 'Tamil', 'Kannada', 'Bengali'];
+
+  List<String> get selectedRegions =>
+      (selectedCountryOption?['regions'] as List<dynamic>?)?.cast<String>() ??
+      const ['Guntur', 'Krishna'];
 
   @override
   void dispose() {
@@ -205,7 +263,8 @@ class _CitizenReportPageState extends State<CitizenReportPage> {
             headers: const {'Content-Type': 'application/json'},
             body: jsonEncode({
               'text': controller.text.trim(),
-              'location': 'Guntur',
+              'country': selectedCountry,
+              'location': selectedLocation,
               'language': selectedLanguage,
             }),
           )
@@ -274,7 +333,14 @@ class _CitizenReportPageState extends State<CitizenReportPage> {
             const SectionHeading(
               icon: Icons.campaign_outlined,
               title: 'Report a community issue',
-              subtitle: 'Your voice can help guide local development.',
+              subtitle: 'Innovation begins by listening to communities.',
+            ),
+            const SizedBox(height: 16),
+            const _InnovationBanner(
+              title: 'BRICS innovation · Citizen voice to public good',
+              description:
+                  'Turn multilingual community needs into explainable, '
+                  'data-informed development priorities.',
             ),
             const SizedBox(height: 24),
             const _FieldLabel('What is happening?'),
@@ -312,6 +378,8 @@ class _CitizenReportPageState extends State<CitizenReportPage> {
                 OutlinedButton.icon(
                   onPressed: () => setState(() {
                     controller.text = 'మా గ్రామంలో తాగునీటి సమస్య ఉంది.';
+                    selectedCountry = 'India';
+                    selectedLocation = 'Guntur';
                     selectedLanguage = 'Auto-detect';
                   }),
                   icon: const Icon(Icons.translate),
@@ -320,12 +388,68 @@ class _CitizenReportPageState extends State<CitizenReportPage> {
               ],
             ),
             const SizedBox(height: 20),
-            const _FieldLabel('Location'),
+            const _FieldLabel('Country'),
             const SizedBox(height: 8),
-            const _InfoTile(
-              icon: Icons.location_on_outlined,
-              title: 'Guntur, Andhra Pradesh',
-              trailing: 'Change',
+            DropdownButtonFormField<String>(
+              initialValue: selectedCountry,
+              decoration: const InputDecoration(
+                filled: true,
+                fillColor: Color(0xFFF8FAFC),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(12)),
+                ),
+              ),
+              items: (countryOptions.isEmpty
+                      ? const [
+                          {'name': 'India'}
+                        ]
+                      : countryOptions)
+                  .map(
+                    (country) => DropdownMenuItem<String>(
+                      value: country['name'].toString(),
+                      child: Text(country['name'].toString()),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value == null) return;
+                final option = countryOptions.firstWhere(
+                  (country) => country['name'] == value,
+                  orElse: () => const {
+                    'regions': ['Guntur']
+                  },
+                );
+                setState(() {
+                  selectedCountry = value;
+                  selectedLocation =
+                      (option['regions'] as List<dynamic>).first.toString();
+                  selectedLanguage = 'Auto-detect';
+                });
+              },
+            ),
+            const SizedBox(height: 12),
+            const _FieldLabel('Region'),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String>(
+              initialValue: selectedLocation,
+              decoration: const InputDecoration(
+                filled: true,
+                fillColor: Color(0xFFF8FAFC),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(12)),
+                ),
+              ),
+              items: selectedRegions
+                  .map(
+                    (region) => DropdownMenuItem(
+                      value: region,
+                      child: Text(region),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value != null) setState(() => selectedLocation = value);
+              },
             ),
             const SizedBox(height: 16),
             const _FieldLabel('Language'),
@@ -339,15 +463,7 @@ class _CitizenReportPageState extends State<CitizenReportPage> {
                   borderRadius: BorderRadius.all(Radius.circular(12)),
                 ),
               ),
-              items: const [
-                'Auto-detect',
-                'English',
-                'Telugu',
-                'Hindi',
-                'Tamil',
-                'Kannada',
-                'Bengali',
-              ]
+              items: ['Auto-detect', ...selectedLanguages]
                   .map(
                     (language) => DropdownMenuItem(
                       value: language,
@@ -457,9 +573,16 @@ class _CitizenReportPageState extends State<CitizenReportPage> {
               ],
             ),
             const SizedBox(height: 18),
+            _ResultRow(
+              label: 'Country / region',
+              value: '${data['country']} / ${data['location']}',
+            ),
             _ResultRow(label: 'Issue', value: data['issue'].toString()),
-            _ResultRow(label: 'Location', value: data['location'].toString()),
             _ResultRow(label: 'Severity', value: data['severity'].toString()),
+            _ResultRow(
+              label: 'Infrastructure index',
+              value: '${data['infrastructure_index']}/100',
+            ),
             _ResultRow(
               label: 'People affected',
               value: '~${data['people_affected']}',
@@ -529,6 +652,11 @@ class _CitizenReportPageState extends State<CitizenReportPage> {
               icon: Icons.lightbulb_outline,
               title: data['recommendation'].toString(),
             ),
+            const SizedBox(height: 8),
+            _InfoTile(
+              icon: Icons.account_balance_outlined,
+              title: data['investment_plan'].toString(),
+            ),
             const SizedBox(height: 12),
             const Text(
               'Demo heuristic only—not an official government allocation formula.',
@@ -551,6 +679,7 @@ class GovernmentDashboardPage extends StatefulWidget {
 
 class _GovernmentDashboardPageState extends State<GovernmentDashboardPage> {
   late Future<Map<String, dynamic>> dashboardFuture;
+  String selectedCountry = 'All BRICS';
   WebSocketChannel? dashboardChannel;
   StreamSubscription<dynamic>? dashboardSubscription;
   Timer? reconnectTimer;
@@ -613,10 +742,11 @@ class _GovernmentDashboardPageState extends State<GovernmentDashboardPage> {
     reconnectTimer = Timer(const Duration(seconds: 2), connectToDashboard);
   }
 
-  Future<Map<String, dynamic>> fetchDashboard() async {
-    final response = await http
-        .get(Uri.parse('$apiBaseUrl/api/dashboard'))
-        .timeout(const Duration(seconds: 12));
+  Future<Map<String, dynamic>> fetchDashboard({String? country}) async {
+    final uri = Uri.parse('$apiBaseUrl/api/dashboard').replace(
+      queryParameters: {'country': country ?? selectedCountry},
+    );
+    final response = await http.get(uri).timeout(const Duration(seconds: 12));
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception('Dashboard API returned ${response.statusCode}.');
     }
@@ -688,7 +818,15 @@ class _GovernmentDashboardPageState extends State<GovernmentDashboardPage> {
                   const SectionHeading(
                     icon: Icons.admin_panel_settings_outlined,
                     title: 'Government dashboard',
-                    subtitle: 'Turn citizen voice into development action.',
+                    subtitle:
+                        'Innovation for inclusive, evidence-informed development.',
+                  ),
+                  const SizedBox(height: 14),
+                  const _InnovationBanner(
+                    title: 'Listen locally. Learn across BRICS.',
+                    description:
+                        'A civic-tech approach to discovering needs and '
+                        'sharing scalable public-service ideas.',
                   ),
                   const SizedBox(height: 10),
                   Row(
@@ -713,7 +851,41 @@ class _GovernmentDashboardPageState extends State<GovernmentDashboardPage> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: 320,
+                    child: DropdownButtonFormField<String>(
+                      initialValue: selectedCountry,
+                      decoration: const InputDecoration(
+                        labelText: 'Country view',
+                        filled: true,
+                        fillColor: Colors.white,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.all(Radius.circular(12)),
+                        ),
+                      ),
+                      items: [
+                        const DropdownMenuItem(
+                          value: 'All BRICS',
+                          child: Text('All BRICS countries'),
+                        ),
+                        for (final country
+                            in data['countries'] as List<dynamic>)
+                          DropdownMenuItem<String>(
+                            value: country['name'].toString(),
+                            child: Text(country['name'].toString()),
+                          ),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setState(() {
+                          selectedCountry = value;
+                          dashboardFuture = fetchDashboard(country: value);
+                        });
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   LayoutBuilder(
                     builder: (context, constraints) {
                       final columns = constraints.maxWidth > 900
@@ -748,7 +920,7 @@ class _GovernmentDashboardPageState extends State<GovernmentDashboardPage> {
                             color: const Color(0xFFE39A10),
                           ),
                           _MetricCard(
-                            label: 'Districts covered',
+                            label: 'Regions covered',
                             value: _number(metrics['districts_covered']),
                             icon: Icons.map_outlined,
                             color: const Color(0xFF1B9B78),
@@ -842,13 +1014,8 @@ class _GovernmentDashboardPageState extends State<GovernmentDashboardPage> {
                         ),
                       ),
                     ),
-                    Positioned(
-                      left: constraints.maxWidth * .33,
-                      top: 12,
-                      child: CustomPaint(
-                        size: Size(constraints.maxWidth * .36, 195),
-                        painter: _IndiaShapePainter(),
-                      ),
+                    Positioned.fill(
+                      child: CustomPaint(painter: _WorldMapPainter()),
                     ),
                     for (final hotspot in hotspots)
                       _mapHotspotFromData(constraints, hotspot),
@@ -856,7 +1023,7 @@ class _GovernmentDashboardPageState extends State<GovernmentDashboardPage> {
                       left: 12,
                       bottom: 10,
                       child: Text(
-                        'Illustrative India map · Andhra Pradesh hotspots',
+                        'Schematic BRICS coverage · illustrative regional markers',
                         style: TextStyle(color: muted, fontSize: 11),
                       ),
                     ),
@@ -993,13 +1160,13 @@ class _GovernmentDashboardPageState extends State<GovernmentDashboardPage> {
   ) {
     final latitude = (hotspot['latitude'] as num).toDouble();
     final longitude = (hotspot['longitude'] as num).toDouble();
-    final left = .30 + ((longitude - 68) / 30).clamp(0.0, 1.0) * .40;
-    final top = .10 + ((36 - latitude) / 28).clamp(0.0, 1.0) * .76;
+    final left = ((longitude + 180) / 360).clamp(.04, .96);
+    final top = ((90 - latitude) / 180).clamp(.08, .84);
     return _mapHotspot(
       constraints,
       left,
       top,
-      hotspot['district'].toString(),
+      '${hotspot['district']}, ${hotspot['country']}',
       _priorityColor(hotspot['priority'].toString()),
     );
   }
@@ -1060,6 +1227,15 @@ class _GovernmentDashboardPageState extends State<GovernmentDashboardPage> {
                     Text(
                       '📊 ${project['requests']} requests   ·   Index ${project['infrastructure_index']}/100   ·   💰 ${project['estimate']}',
                       style: const TextStyle(color: muted, fontSize: 13),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      project['explanation'].toString(),
+                      style: const TextStyle(
+                        color: muted,
+                        fontSize: 12,
+                        height: 1.45,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     Row(
@@ -1143,6 +1319,57 @@ class SectionHeading extends StatelessWidget {
   }
 }
 
+class _InnovationBanner extends StatelessWidget {
+  const _InnovationBanner({
+    required this.title,
+    required this.description,
+  });
+
+  final String title;
+  final String description;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFEAF2FF),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFD7E6FA)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(Icons.lightbulb_outline, color: blue),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: ink,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    description,
+                    style: const TextStyle(
+                      color: muted,
+                      fontSize: 12,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
 class _FieldLabel extends StatelessWidget {
   const _FieldLabel(this.text);
   final String text;
@@ -1159,11 +1386,10 @@ class _FieldLabel extends StatelessWidget {
 }
 
 class _InfoTile extends StatelessWidget {
-  const _InfoTile({required this.icon, required this.title, this.trailing});
+  const _InfoTile({required this.icon, required this.title});
 
   final IconData icon;
   final String title;
-  final String? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -1184,11 +1410,6 @@ class _InfoTile extends StatelessWidget {
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
           ),
-          if (trailing != null)
-            Text(
-              trailing!,
-              style: const TextStyle(color: blue, fontWeight: FontWeight.w700),
-            ),
         ],
       ),
     );
@@ -1313,39 +1534,85 @@ class _Legend extends StatelessWidget {
       );
 }
 
-class _IndiaShapePainter extends CustomPainter {
+class _WorldMapPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final shape = Path()
-      ..moveTo(size.width * .31, size.height * .02)
-      ..lineTo(size.width * .50, size.height * .08)
-      ..lineTo(size.width * .69, size.height * .13)
-      ..lineTo(size.width * .78, size.height * .27)
-      ..lineTo(size.width * .92, size.height * .38)
-      ..lineTo(size.width * .85, size.height * .51)
-      ..lineTo(size.width * .74, size.height * .61)
-      ..lineTo(size.width * .70, size.height * .76)
-      ..lineTo(size.width * .59, size.height * .82)
-      ..lineTo(size.width * .51, size.height * .99)
-      ..lineTo(size.width * .39, size.height * .79)
-      ..lineTo(size.width * .27, size.height * .72)
-      ..lineTo(size.width * .19, size.height * .55)
-      ..lineTo(size.width * .08, size.height * .45)
-      ..lineTo(size.width * .19, size.height * .32)
-      ..close();
-    canvas.drawPath(
-      shape,
-      Paint()
-        ..color = const Color(0xFF8FAAC6).withValues(alpha: .22)
-        ..style = PaintingStyle.fill,
-    );
-    canvas.drawPath(
-      shape,
-      Paint()
-        ..color = const Color(0xFF7894B1).withValues(alpha: .5)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2,
-    );
+    final land = Paint()
+      ..color = const Color(0xFF7894B1).withValues(alpha: .25)
+      ..style = PaintingStyle.fill;
+    final outline = Paint()
+      ..color = const Color(0xFF7894B1).withValues(alpha: .42)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2;
+    final continents = [
+      [
+        const Offset(.08, .25),
+        const Offset(.13, .16),
+        const Offset(.24, .15),
+        const Offset(.29, .25),
+        const Offset(.24, .34),
+        const Offset(.22, .47),
+        const Offset(.18, .62),
+        const Offset(.12, .52),
+        const Offset(.09, .38),
+      ],
+      [
+        const Offset(.23, .55),
+        const Offset(.31, .52),
+        const Offset(.35, .61),
+        const Offset(.33, .74),
+        const Offset(.29, .91),
+        const Offset(.25, .80),
+        const Offset(.23, .66),
+      ],
+      [
+        const Offset(.43, .20),
+        const Offset(.50, .15),
+        const Offset(.60, .19),
+        const Offset(.65, .27),
+        const Offset(.61, .34),
+        const Offset(.53, .32),
+        const Offset(.49, .39),
+        const Offset(.45, .32),
+      ],
+      [
+        const Offset(.48, .41),
+        const Offset(.57, .39),
+        const Offset(.62, .49),
+        const Offset(.59, .66),
+        const Offset(.55, .83),
+        const Offset(.50, .72),
+        const Offset(.47, .55),
+      ],
+      [
+        const Offset(.62, .22),
+        const Offset(.72, .16),
+        const Offset(.86, .18),
+        const Offset(.94, .29),
+        const Offset(.89, .42),
+        const Offset(.79, .44),
+        const Offset(.73, .36),
+        const Offset(.65, .39),
+        const Offset(.60, .31),
+      ],
+      [
+        const Offset(.80, .52),
+        const Offset(.88, .49),
+        const Offset(.91, .59),
+        const Offset(.87, .70),
+        const Offset(.81, .65),
+      ],
+    ];
+    for (final points in continents) {
+      final path = Path()
+        ..moveTo(points.first.dx * size.width, points.first.dy * size.height);
+      for (final point in points.skip(1)) {
+        path.lineTo(point.dx * size.width, point.dy * size.height);
+      }
+      path.close();
+      canvas.drawPath(path, land);
+      canvas.drawPath(path, outline);
+    }
   }
 
   @override
@@ -1363,11 +1630,17 @@ String _number(dynamic value) {
 String? _speechLocale(String language) {
   const locales = {
     'English': 'en-IN',
+    'Portuguese': 'pt-BR',
+    'Chinese (Mandarin)': 'zh-CN',
     'Telugu': 'te-IN',
     'Hindi': 'hi-IN',
     'Tamil': 'ta-IN',
     'Kannada': 'kn-IN',
     'Bengali': 'bn-IN',
+    'Russian': 'ru-RU',
+    'isiZulu': 'zu-ZA',
+    'isiXhosa': 'xh-ZA',
+    'Afrikaans': 'af-ZA',
   };
   return locales[language];
 }

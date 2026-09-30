@@ -1,6 +1,11 @@
-district,population,school_age_population,rural_share
-Guntur,842000,184000,0.62
-Krishna,1260000,263000,0.58
-Vizag,910000,172000,0.31
-Nellore,530000,104000,0.49
-Prakasam,740000,151000,0.71
+country,country_code,region,population,children,rural_share,vulnerable_population
+India,IN,Guntur,842000,184000,0.62,221000
+India,IN,Krishna,1260000,263000,0.58,302000
+Brazil,BR,Bahia,14100000,3120000,0.27,3560000
+Brazil,BR,Sao Paulo,44400000,8900000,0.04,8120000
+Russia,RU,Tatarstan,4000000,760000,0.23,680000
+Russia,RU,Moscow,13100000,2240000,0.00,1730000
+China,CN,Guangdong,127000000,19800000,0.31,16400000
+China,CN,Sichuan,83700000,11900000,0.48,14300000
+South Africa,ZA,Gauteng,16200000,3480000,0.03,5210000
+South Africa,ZA,Western Cape,7400000,1540000,0.15,1710000
