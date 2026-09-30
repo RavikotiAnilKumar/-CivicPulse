@@ -58,6 +58,9 @@ CivicPulse_AI/
 │       ├── infrastructure.csv
 │       ├── demographics.csv
 │       └── investment_plans.csv
+├── render.yaml
+├── vercel.json
+├── scripts/build-vercel.sh
 ├── docs/
 │   ├── priority_algorithm.md
 │   └── demo_script.md
@@ -149,3 +152,29 @@ and AI services. Production work must add licensed/official data connectors,
 country-specific administrative boundaries, consent and retention controls,
 secure identity/access, human review, accessibility/localization, and
 independently validated language models and scoring.
+
+## Publish a public demo
+
+The repository includes a Render Blueprint for the FastAPI API and a Vercel
+build configuration for the Flutter web app:
+
+1. In Render, create a **Blueprint** from this GitHub repository and deploy
+   `render.yaml`. Wait for `/api/health` to report `{"status":"ok"}` and copy
+   the assigned API URL (for example, `https://civicpulse-api.onrender.com`).
+2. In Vercel, import the same repository. Keep the project root at the
+   repository root and add the environment variable `API_BASE_URL` with the
+   Render API URL. The configured build downloads the pinned Flutter SDK
+   version and publishes `frontend/build/web`.
+3. Deploy/redeploy in Vercel and open the resulting `*.vercel.app` URL. The
+   frontend uses the Render API for report analysis and live dashboard updates.
+
+Both providers require you to sign in and approve/import the repository in
+their dashboards; this repository alone does not create hosted services or
+produce a public URL. Provider free-tier availability and limits may change.
+
+**Public-demo caveats:** the API is unauthenticated and accepts public report
+submissions; do not submit personal, sensitive, or real citizen information.
+The Render configuration stores SQLite at `/tmp`, which is ephemeral, so
+submitted demo reports can be lost when the service restarts. Free web services
+may also sleep when idle. This setup is for showcasing synthetic data, not
+production workloads or durable citizen records.

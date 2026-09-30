@@ -1,0 +1,11 @@
+{
+  "framework": null,
+  "buildCommand": "bash scripts/build-vercel.sh",
+  "outputDirectory": "frontend/build/web",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
